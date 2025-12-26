@@ -1,0 +1,37 @@
+name: gizilens_app_final
+description: "Project GiziLens Final"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  # Paket Integrasi Backend
+  http: ^1.2.1
+  shared_preferences: ^2.2.3
+
+  # Wajib untuk Desain (Poppins Font)
+  google_fonts: ^6.1.0 
+
+  # Wajib untuk Kamera & Galeri (Baru Ditambahkan)
+  image_picker: ^1.0.4 
+  tflite_flutter: ^0.12.1
+  geolocator: ^14.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  
+  # Daftarkan Assets di sini
+  assets: 
+    - assets/logo.png
+    - assets/google.png
