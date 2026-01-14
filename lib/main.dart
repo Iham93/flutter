@@ -1,71 +1,60 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'auth_pages.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'home_pages.dart'; //
+import 'auth_pages.dart'; //
+import 'screens/food_detect_screen.dart'; //
+import 'screens/chat_screen.dart'; // Pastikan Anda sudah membuat file ini
 
 void main() {
-  runApp(const MyApp());
+  runApp(const GiziLensApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class GiziLensApp extends StatelessWidget {
+  const GiziLensApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'GiziLens Modern',
+      title: 'GiziLens Posyandu',
       theme: ThemeData(
+        primarySwatch: Colors.teal,
         useMaterial3: true,
-        // Font Modern
-        textTheme: GoogleFonts.poppinsTextTheme(),
-
-        // Warna Utama: Hijau Tosca Modern & Aksen Oranye
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF00BFA5), // Hijau Tosca
-          secondary: const Color(0xFFFF9100), // Oranye
-          surface: const Color(0xFFF0F4F8), // Background Abu Kebiruan (Soft)
-        ),
-
-        // Style Input Field (Isian Teks)
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: Color(0xFF00BFA5), width: 2),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 18,
-          ),
-        ),
-
-        // Style Tombol
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            elevation: 5,
-            backgroundColor: const Color(0xFF00BFA5),
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            textStyle: GoogleFonts.poppins(
-              fontWeight: FontWeight.w600,
-              fontSize: 16,
-            ),
-          ),
-        ),
+        fontFamily: 'Poppins', // Menyesuaikan desain modern di video Anda
       ),
-      home: const AuthPage(),
+      home: const SplashWrapper(), //
+      // PENDAFTARAN RUTE LENGKAP
+      routes: {
+        '/login': (context) => const LoginPage(),
+        '/home': (context) => const HomePage(),
+        '/food_detect': (context) => const FoodDetectScreen(),
+        '/chat': (context) => const ChatScreen(), // AKTIFKAN CHAT AI
+        // '/history': (context) => const HistoryScreen(), // Aktifkan jika file sudah ada
+      },
+    );
+  }
+}
+
+class SplashWrapper extends StatelessWidget {
+  const SplashWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: SharedPreferences.getInstance(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final prefs = snapshot.data as SharedPreferences;
+        final token = prefs.getString("token"); // Cek status login
+
+        // Alur Flow 1: Jika ada token langsung ke Home, jika tidak ke Login
+        return token != null ? const HomePage() : const LoginPage();
+      },
     );
   }
 }

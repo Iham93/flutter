@@ -1,170 +1,117 @@
 import 'dart:convert';
+import 'dart:io'; // Penting untuk menangani file gambar
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // =======================================================================
-  // PENTING: Pastikan IP ini sesuai dengan IP Laptop/Komputer Anda saat ini
-  // UPDATE SESUAI IPCONFIG TERBARU: 192.168.1.9
-  // =======================================================================
-  static const String baseUrl = 'http://192.168.1.9:5000/api';
+  // Alamat IP Backend (Sesuaikan dengan hasil ipconfig laptop Anda)
+  // Pastikan HP dan Laptop berada dalam satu jaringan Wi-Fi yang sama
+  static const String baseUrl = "http://192.168.1.6:5000/api";
 
-  // --- HELPER: GET HEADERS ---
-  Future<Map<String, String>> _getHeaders() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token');
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
+  // Fungsi helper untuk mengambil token dari penyimpanan lokal
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString("token");
   }
 
-  // 1. LOGIN
+  // =====================================================
+  // 1. FUNGSI LOGIN (Autentikasi User)
+  // =====================================================
   Future<bool> login(String email, String password) async {
-    final url = Uri.parse('$baseUrl/login');
     try {
       final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
+        Uri.parse("$baseUrl/login"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"email": email.trim(), "password": password}),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        SharedPreferences prefs = await SharedPreferences.getInstance();
+        final prefs = await SharedPreferences.getInstance();
 
-        // Menyimpan data utama
-        await prefs.setString('user_name', data['full_name'] ?? 'User');
-        await prefs.setString('token', data['access_token']);
-
-        // Menyimpan NIK dan Wilayah dari respons Flask
-        await prefs.setString('nik', data['nik'] ?? '00000000');
-        await prefs.setString('wilayah', data['wilayah'] ?? 'Unknown');
-        
-        // PENTING: Menyimpan ID user untuk keperluan filter data pribadi
-        await prefs.setString('user_id', data['user_id'].toString());
-
+        // Simpan token akses dan nama user untuk keperluan sesi aplikasi
+        await prefs.setString("token", data["access_token"]);
+        await prefs.setString("full_name", data["user"]["full_name"]);
         return true;
       }
       return false;
     } catch (e) {
-      print("Error Login: $e");
+      print("Error koneksi login: $e");
       return false;
     }
   }
 
-  // 2. REGISTER
-  Future<bool> register(
-    String nama,
-    String email,
-    String password,
-    String nik,
-    String hp,
+  // =====================================================
+  // 2. FUNGSI SIMPAN SURVEY (Mendukung Multi-Upload Gambar)
+  // =====================================================
+  // Parameter ke-2 diubah menjadi List<File?> untuk mendukung 3 sesi makan
+  Future<bool> saveSurvey(
+    Map<String, dynamic> payload,
+    List<File?> images,
   ) async {
-    final url = Uri.parse('$baseUrl/users');
     try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'full_name': nama,
-          'email': email,
-          'password': password,
-          'nik': nik,
-          'phone_number': hp,
-        }),
+      final token = await _getToken();
+
+      // Inisialisasi MultipartRequest
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse("$baseUrl/surveys/scan"),
       );
-      return response.statusCode == 201;
+
+      // Tambahkan Header Autentikasi
+      request.headers.addAll({"Authorization": "Bearer $token"});
+
+      // Masukkan semua field teks dari payload (nama, nik, gizi, dll)
+      payload.forEach((key, value) {
+        request.fields[key] = value.toString();
+      });
+
+      // Loop untuk memasukkan banyak file gambar sekaligus (Pagi, Siang, Sore)
+      // Key 'image' harus sesuai dengan request.files.getlist('image') di Flask
+      for (var image in images) {
+        if (image != null) {
+          request.files.add(
+            await http.MultipartFile.fromPath('image', image.path),
+          );
+        }
+      }
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode != 201 && response.statusCode != 200) {
+        print("Detail Gagal Simpan (${response.statusCode}): ${response.body}");
+      }
+
+      // Backend Flask Anda mengembalikan 201 untuk sukses simpan
+      return response.statusCode == 201 || response.statusCode == 200;
     } catch (e) {
-      print("Error Register: $e");
+      print("Error koneksi saveSurvey: $e");
       return false;
     }
   }
 
-  // 3. GET DATA SURVEI (PERSONAL DATA)
-  Future<List<dynamic>> getSurveys() async {
-    final url = Uri.parse('$baseUrl/surveys/personal');
+  // =====================================================
+  // 3. FUNGSI UPDATE SURVEY (Fitur Edit Data Riwayat)
+  // =====================================================
+  Future<bool> updateSurvey(int id, Map<String, dynamic> payload) async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(url, headers: headers);
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      }
-      return [];
-    } catch (e) {
-      print("Error Get Data: $e");
-      return [];
-    }
-  }
+      final token = await _getToken();
 
-  // 4. AMBIL NAMA USER
-  Future<String> getUserName() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.getString('user_name') ?? "Pengguna";
-  }
-
-  // 5. LOGOUT
-  Future<void> logout() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-  }
-
-  // 6. FUNGSI CHAT AI (Groq)
-  Future<String> sendChatMessage(String message) async {
-    final url = Uri.parse('$baseUrl/chat');
-    try {
-      final response = await http.post(
-        url,
-        headers: await _getHeaders(),
-        body: jsonEncode({'message': message}),
+      // Menggunakan method PUT untuk memperbarui data yang sudah ada
+      final response = await http.put(
+        Uri.parse("$baseUrl/surveys/$id"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode(payload),
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['response'] ?? 'Maaf, terjadi kesalahan di server.';
-      } else {
-        return 'Gagal terhubung ke AI. (Status: ${response.statusCode})';
-      }
+      // Mengembalikan true jika server merespon dengan kode sukses (200 OK)
+      return response.statusCode == 200;
     } catch (e) {
-      return 'Error koneksi: Server Flask tidak merespons.';
-    }
-  }
-
-  // 7. ANALISIS GAMBAR (YOLO)
-  Future<Map<String, dynamic>> analyzeFoodImage(String imageBase64) async {
-    final url = Uri.parse('$baseUrl/surveys/analyze');
-    try {
-      final response = await http.post(
-        url,
-        headers: await _getHeaders(),
-        body: jsonEncode({'image': imageBase64}),
-      );
-
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      } else {
-        final errorBody = jsonDecode(response.body);
-        return {
-          "error": "Gagal analisis. Status: ${response.statusCode}. Pesan: ${errorBody['error'] ?? 'Tidak diketahui'}",
-        };
-      }
-    } catch (e) {
-      return {"error": "Error koneksi saat analisis: $e"};
-    }
-  }
-
-  // 8. SIMPAN DATA SURVEI BARU
-  Future<bool> saveNewSurvey(Map<String, dynamic> data) async {
-    final url = Uri.parse('$baseUrl/surveys/add');
-    try {
-      final response = await http.post(
-        url,
-        headers: await _getHeaders(),
-        body: jsonEncode(data),
-      );
-      return response.statusCode == 201; 
-    } catch (e) {
-      print("Error Save Survey: $e");
+      print("Error updateSurvey: $e");
       return false;
     }
   }
